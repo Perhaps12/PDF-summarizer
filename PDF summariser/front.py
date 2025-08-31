@@ -72,8 +72,10 @@ st.title("RapidRead Summarizer")
 #upload & save file
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
 
+#once the file is uploaded
 if uploaded_file:
     if st.button("Summarize"):
+        #loading animation
         with st.spinner("Extracting text..."):
             file_bytes = uploaded_file.read()
             text = pdf_to_text(file_bytes)
@@ -84,7 +86,8 @@ if uploaded_file:
                 final, partials = summarize_long(text, 512)
             st.subheader("Final Summary")
             st.write(final)
-            with st.expander("Chunk summaries (summary every ~3000 words)"):
+            with st.expander("Chunk summaries"):
+                st.write("These summaries are taken every ~3000 words or so (4000 tokens) to work around the limitations of the model. As a result, these summaries are often not as polished as the final and are displayed in case the user is curious.")
                 for i, p in enumerate(partials, 1):
                     st.markdown(f"**Chunk {i}**")
                     st.write(p)
