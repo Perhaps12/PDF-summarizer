@@ -10,6 +10,14 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
 model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_ID).to(device)
 
+def pdf_to_text(file):
+    pages = []
+    with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+        for page in doc:
+            pages.append(page.get_text("text") or "")
+    return "\n\n".join(pages)
+
+#split text into chunks
 def chunk_by_tokens(text: str, tokenizer, max_input_tokens=3800):
     # method intended to split the document into chunks of text each about 3800 tokens
     # leave headroom for special tokens; ~3800 is safe under 4096
@@ -31,6 +39,7 @@ def chunk_by_tokens(text: str, tokenizer, max_input_tokens=3800):
         chunks.append(" ".join(cur_words)) #append any remaining words if they exist
     return chunks
 
+#summarization
 @torch.inference_mode()
 def summarize_long(text: str, max_new_tokens=256):
     chunks = chunk_by_tokens(text, tokenizer)
@@ -39,7 +48,7 @@ def summarize_long(text: str, max_new_tokens=256):
     #Model settings
     gen_kwargs = dict(
         max_new_tokens=max_new_tokens,
-        num_beams=4,
+        num_beams=2,
         no_repeat_ngram_size=3,
         length_penalty=0.8,
         early_stopping=True,
@@ -59,37 +68,27 @@ def summarize_long(text: str, max_new_tokens=256):
 if "document" not in st.session_state:
     st.session_state.document = ""
 
-st.title("AI Summarizer")
-
+st.title("RapidRead Summarizer")
 #upload & save file
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
-if st.button("Upload File"):
-    if uploaded_file is None:
-        st.error("Please upload a file first")
-    else:
-        try:
-            whole_doc = ""   
-            file_bytes = uploaded_file.read()
-            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
-                whole_doc = "\n\n".join(
-                    f"=== Page {i+1} ===\n{page.get_text('text') or ''}"
-                    for i, page in enumerate(doc)
-                )#seperate pages by ===Page #==== and new lines
-            st.session_state.document = whole_doc #save document to the session state
-            st.success("File uploaded")
-            
-        except Exception as e:
-            st.error(e)
 
-if len(st.session_state.document) > 0:
-    st.write(st.session_state.document)
-    st.subheader("Final summary:")
-    final, partials = summarize_long(st.session_state.document, 256)
-    st.write(final)
-    with st.expander("Chunk summaries"):
-        for i, p in enumerate(partials, 1):
-            st.markdown(f"**Chunk {i}**")
-            st.write(p)
+if uploaded_file:
+    if st.button("Summarize"):
+        with st.spinner("Extracting text..."):
+            file_bytes = uploaded_file.read()
+            text = pdf_to_text(file_bytes)
+        if not text.strip():
+            st.warning("No extractable text found..")
+        else:
+            with st.spinner("Summarizing... (first run may take longer)"):
+                final, partials = summarize_long(text, 512)
+            st.subheader("Final Summary")
+            st.write(final)
+            with st.expander("Chunk summaries (summary every ~3000 words)"):
+                for i, p in enumerate(partials, 1):
+                    st.markdown(f"**Chunk {i}**")
+                    st.write(p)
+
 
 
 
